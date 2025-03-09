@@ -20,12 +20,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.drxproject.live.models.Bom;
+import com.drxproject.live.models.BomMaterial;
 import com.drxproject.live.models.ERole;
 import com.drxproject.live.models.EStage;
+import com.drxproject.live.models.Material;
 import com.drxproject.live.models.User;
 import com.drxproject.live.models.Product;
 import com.drxproject.live.models.ProductStageHistory;
 import com.drxproject.live.models.Stage;
+import com.drxproject.live.repositories.BomMaterialRepository;
+import com.drxproject.live.repositories.BomRepository;
+import com.drxproject.live.repositories.MaterialRepository;
 import com.drxproject.live.repositories.ProductRepository;
 import com.drxproject.live.repositories.StageRepository;
 import com.drxproject.live.repositories.UserRepository;
@@ -53,6 +59,15 @@ public class ProductController {
     @Autowired
     private ProductStageHistoryRepository productStageHistoryRepository;
 
+    @Autowired
+    private BomRepository bomRepository;
+
+    @Autowired
+    private BomMaterialRepository bomMaterialRepository;
+
+    @Autowired
+    private MaterialRepository materialRepository;
+
     @PostMapping("/new")
     public ResponseEntity<?> createProduct(@RequestBody Product product) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -64,6 +79,23 @@ public class ProductController {
             User user = userOpt.get();
             if (userHasRole(user, ERole.ROLE_ADMIN) || userHasRole(user, ERole.ROLE_DESIGNER)) {
                 try {
+                    if (product.getBom() != null) {
+                        Bom bom = product.getBom();
+                        for (BomMaterial bomMaterial : bom.getBomMaterials()) {
+                            bomMaterial.setBom(bom);
+                            Optional<Material> materialOpt = materialRepository
+                                    .findById(bomMaterial.getMaterial().getMaterialNumber());
+                            if (materialOpt.isPresent()) {
+                                bomMaterial.setMaterial(materialOpt.get());
+                            } else {
+                                return ResponseEntity.badRequest().body("Material with ID "
+                                        + bomMaterial.getMaterial().getMaterialNumber() + " does not exist.");
+                            }
+                        }
+                        bom = bomRepository.save(bom);
+                        bomMaterialRepository.saveAll(bom.getBomMaterials());
+                        // product.setBom(bom);
+                    }
                     Product savedProduct = productRepository.save(product);
 
                     Stage initialStage = stageRepository.findByName(EStage.CONCEPT)
@@ -106,7 +138,6 @@ public class ProductController {
         Long userId = userDetails.getId();
 
         try {
-            // Extract the desired stage from the JSON body
             String stageStr = request.get("stage");
             EStage newEStage = EStage.valueOf(stageStr.toUpperCase());
 

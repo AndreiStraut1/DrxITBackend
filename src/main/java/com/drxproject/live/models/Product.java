@@ -35,16 +35,21 @@ public class Product {
     @Column(name = "name", nullable = false)
     private String name;
 
+    @OneToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "bom_id", referencedColumnName = "bom_id", unique = true)
+    private Bom bom;
+
     public Product() {
     }
 
     public Product(String description, double estimated_height, double estimated_weight, double estimated_width,
-            String name) {
+            String name, Bom bom) {
         this.description = description;
         this.estimated_height = estimated_height;
         this.estimated_weight = estimated_weight;
         this.estimated_width = estimated_width;
         this.name = name;
+        this.bom = bom;
     }
 
     public Long getId() {
@@ -93,5 +98,16 @@ public class Product {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public Bom getBom() {
+        return bom;
+    }
+
+    public void setBom(Bom bom) {
+        this.bom = bom;
+        if (bom != null) {
+            bom.setProduct(this);
+        }
     }
 }
