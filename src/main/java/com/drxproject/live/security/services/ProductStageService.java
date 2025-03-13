@@ -40,17 +40,13 @@ public class ProductStageService {
             Product product = productOpt.get();
             User user = userOpt.get();
 
-            // Get the current stage from the product history (this is just an example;
-            // you might need to adjust the query to fetch the latest history record)
             ProductStageHistory latestHistory = productStageHistoryRepository
                     .findTopByProductOrderByStartOfStageDesc(product)
                     .orElse(null);
             Stage currentStage = (latestHistory != null) ? latestHistory.getStage() : null;
 
-            // Compute the next stage based on your business logic
             Stage nextStage = determineNextStage(currentStage);
 
-            // Optionally: check if the user is allowed to move to that stage
             if (canMoveToNextStage(user, currentStage)) {
                 ProductStageHistory stageHistory = new ProductStageHistory(product, nextStage,
                         new Timestamp(System.currentTimeMillis()), user);
@@ -63,6 +59,7 @@ public class ProductStageService {
         }
     }
 
+    @SuppressWarnings("null")
     public void overrideStage(Long productId, EStage newEStage, Long userId) {
         Optional<Product> productOpt = productRepository.findById(productId);
         Optional<User> userOpt = userRepository.findById(userId);
@@ -80,13 +77,20 @@ public class ProductStageService {
             Stage newStage = stageRepository.findByName(newEStage)
                     .orElseThrow(() -> new RuntimeException("Stage not found: " + newEStage));
 
+            ProductStageHistory previousHistory = productStageHistoryRepository
+                    .findPreviousStageHistory(product.getId())
+                    .orElse(null);
+
+            Stage previousStage = (previousHistory != null) ? previousHistory.getStage() : null;
+
             if (currentStage != null) {
                 if (currentStage.getName() == EStage.CANCEL) {
                     throw new RuntimeException("Product has been cancelled, it's stage cannot be modified.");
                 }
-                if (currentStage.getName() == EStage.STANDBY && newStage.getName() != EStage.PRODUCTION) {
+                if (currentStage.getName() == EStage.STANDBY && newStage.getName() != previousStage.getName()) {
                     throw new RuntimeException(
-                            "Product has been put on standby, it's stage can only be modified to Production");
+                            "Product has been put on standby, stage can only be modified to the stage it had previously: "
+                                    + previousStage.getName());
                 }
             }
 
@@ -94,7 +98,6 @@ public class ProductStageService {
                 throw new RuntimeException("User does not have permission to set stage to " + newEStage);
             }
 
-            // Create and save a new history record for the stage change
             ProductStageHistory stageHistory = new ProductStageHistory(
                     product, newStage, new Timestamp(System.currentTimeMillis()), user);
             productStageHistoryRepository.save(stageHistory);
@@ -104,15 +107,14 @@ public class ProductStageService {
     }
 
     private boolean canManuallySetStage(User user, Stage newStage) {
-        // You may want to customize this logic. For example:
         switch (newStage.getName()) {
             case CANCEL:
             case STANDBY:
                 return user.getRoles().stream().anyMatch(role -> role.getName().equals(ERole.ROLE_ADMIN));
             case PRODUCTION:
-                return user.getRoles().stream().anyMatch(role -> role.getName().equals(ERole.ROLE_SELLER));
+                return user.getRoles().stream().anyMatch(
+                        role -> role.getName().equals(ERole.ROLE_SELLER) || role.getName().equals(ERole.ROLE_ADMIN));
             default:
-                // By default, allow the change if the user has any high privilege role.
                 return user.getRoles().stream().anyMatch(role -> role.getName().equals(ERole.ROLE_ADMIN) ||
                         role.getName().equals(ERole.ROLE_PORTOFOLIO_MANAGER));
         }
@@ -121,7 +123,7 @@ public class ProductStageService {
     private Stage determineNextStage(Stage currentStage) {
         EStage nextEStage;
         if (currentStage == null) {
-            nextEStage = EStage.CONCEPT; // initial stage if none exists
+            nextEStage = EStage.CONCEPT;
         } else {
             switch (currentStage.getName()) {
                 case CONCEPT:
@@ -137,7 +139,6 @@ public class ProductStageService {
                     throw new RuntimeException("No valid next stage found for: " + currentStage.getName());
             }
         }
-        // Use the stageRepository to get the Stage entity corresponding to nextEStage
         return stageRepository.findByName(nextEStage)
                 .orElseThrow(() -> new RuntimeException("Stage not found: " + nextEStage));
     }

@@ -77,7 +77,6 @@ public class UserController {
     @PutMapping("/update-role/{userId}")
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     public ResponseEntity<?> updateRole(@PathVariable Long userId, @RequestBody List<String> userRoles) {
-        System.out.println("Testing");
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isPresent()) {
             User user = userOpt.get();

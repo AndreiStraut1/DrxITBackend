@@ -31,4 +31,7 @@ public interface ProductStageHistoryRepository extends JpaRepository<ProductStag
 
     void deleteByProduct(Product product);
 
+    @Query(value = "SELECT * FROM product_stage_history WHERE product_id = ?1 ORDER BY start_of_stage DESC LIMIT 1 OFFSET 1", nativeQuery = true)
+    Optional<ProductStageHistory> findPreviousStageHistory(Long productId);
+
 }
